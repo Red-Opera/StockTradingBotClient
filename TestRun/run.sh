@@ -3,6 +3,10 @@ APP_NAME="trader-client"
 APP_DIR=~/Trader/WebTestClient
 PORT=3000
 
+#  강제 설치/강제 빌드 플래그. 환경변수로 설정하면 덮어씀 (예: FORCE_INSTALL=1)
+FORCE_INSTALL=${FORCE_INSTALL:-0}
+FORCE_BUILD=${FORCE_BUILD:-0}
+
 echo "====================================="
 echo "애플리케이션 실행을 시작합니다."
 echo "====================================="
@@ -18,20 +22,33 @@ echo "Node.js 버전: $(node -v)"
 echo "npm 버전: $(npm -v)"
 
 # 의존성 설치 (빌드를 위해 전체 설치 필요)
-echo "의존성 설치 중 (빌드 도구 포함)..."
-npm install  # <--- [수정됨] --omit=dev를 제거하여 tsc, vite를 설치합니다.
-if [ $? -ne 0 ]; then
-    echo "ERROR: 의존성 설치 실패"
-    exit 1
+# node_modules가 없을 경우에만 설치. 필요 시 FORCE_INSTALL=1 환경변수로 강제 설치 가능.
+echo "의존성 확인..."
+if [ "$FORCE_INSTALL" = "1" ]; then
+    echo "강제 설치(FORCE_INSTALL=1) 활성화: 의존성을 설치합니다..."
+    npm install || { echo "ERROR: 의존성 설치 실패"; exit 1; }
+else
+    if [ ! -d node_modules ]; then
+        echo "node_modules 폴더가 없습니다. 의존성을 설치합니다..."
+        npm install || { echo "ERROR: 의존성 설치 실패"; exit 1; }
+    else
+        echo "node_modules 존재. 설치를 생략합니다. (필요하면 FORCE_INSTALL=1로 강제)"
+    fi
 fi
 
 # 프로젝트 빌드 (TypeScript + Vite)
-echo "프로젝트 빌드 중..."
-# 만약 npx가 tsc를 못 찾으면 ./node_modules/.bin/tsc 로 직접 지정할 수도 있습니다.
-npx tsc -b && npx vite build
-if [ $? -ne 0 ]; then
-    echo "ERROR: 빌드 실패"
-    exit 1
+# dist가 없으면 빌드. FORCE_BUILD=1로 강제 빌드 가능.
+echo "빌드 검사..."
+if [ "$FORCE_BUILD" = "1" ]; then
+    echo "강제 빌드(FORCE_BUILD=1) 활성화: 빌드합니다..."
+    npx tsc -b && npx vite build || { echo "ERROR: 빌드 실패"; exit 1; }
+else
+    if [ ! -d dist ]; then
+        echo "dist 폴더가 없습니다. 빌드합니다..."
+        npx tsc -b && npx vite build || { echo "ERROR: 빌드 실패"; exit 1; }
+    else
+        echo "dist 폴더가 존재합니다. 빌드를 생략합니다. (필요하면 FORCE_BUILD=1로 강제)"
+    fi
 fi
 
 # 기존 PM2 프로세스 종료 및 정리 (불필요한 에러 방지)

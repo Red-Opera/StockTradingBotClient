@@ -9,6 +9,7 @@ $REMOTE_PATH = "~/Trader/WebTestClient"
 $ARCHIVE     = "client-test.tar.gz"
 $SSH_KEY     = ""      # SSH 키 경로
 $PROJECT_PATH = "D:\Development\Trader\StockTradingBotClient"
+$ForceClean = "0"
 
 # 현재 스크립트 위치 확인
 $SCRIPT_DIR = Split-Path -Parent $MyInvocation.MyCommand.Path
@@ -35,7 +36,7 @@ $EXCLUDE_PATTERNS = @(
     "*.log"
     ".env"
     ".env.local"
-    "dist"
+    "dist"          # 빌드 결과물 폴더 (필요 시 제외)
     "build"
     "coverage"
     ".cache"
@@ -146,7 +147,22 @@ Write-Host "서버 디렉토리를 초기화하고 배포합니다."
 Write-Host "====================================="
 Write-Host "서버에서 배포 진행 중..." -ForegroundColor Cyan
 
-$deployCommand = "cd $REMOTE_PATH && echo '기존 파일 삭제 중 (sudo 사용)...' && sudo find . -mindepth 1 -maxdepth 1 ! -name '$ARCHIVE' -exec rm -rf {} + && echo '압축 해제 중...' && tar -xzf $ARCHIVE && rm -f $ARCHIVE && echo '' && echo '배포 완료!' && echo '총 파일 수:' && find . -type f | wc -l"
+# 기본 동작: 기존 파일 삭제 시 node_modules(및 .pm2)를 보존, 전체 삭제가 필요하면 환경변수 FORCE_CLEAN=1을 설정
+if ($ForceClean -eq "1")
+{
+    Write-Host "경고: FORCE_CLEAN=1 - 서버의 모든 파일(아카이브 제외)을 삭제합니다." -ForegroundColor Yellow
+    $deletePattern = "! -name '$ARCHIVE' -exec rm -rf {} +"
+} 
+
+else 
+{
+    Write-Host "기본 동작: 'node_modules'와 '.pm2' 폴더를 보존합니다. (전체 제거 필요 시 FORCE_CLEAN=1 설정)" -ForegroundColor Green
+    # 보존할 폴더를 추가하려면 아래에 ! -name '폴더명'을 추가하세요.
+    $deletePattern = "! -name '$ARCHIVE' ! -name 'node_modules' ! -name '.pm2' -exec rm -rf {} +"
+}
+
+# deploy 명령 조립: 한 줄로 SSH로 전달
+$deployCommand = "cd $REMOTE_PATH && echo '기존 파일 삭제 중 (sudo 사용)...' && sudo find . -mindepth 1 -maxdepth 1 $deletePattern && echo '압축 해제 중...' && tar -xzf $ARCHIVE && rm -f $ARCHIVE && echo '' && echo '배포 완료!' && echo '총 파일 수:' && find . -type f | wc -l"
 
 ssh -i "$SSH_KEY" "$SSH_TARGET" $deployCommand
 
