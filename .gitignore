@@ -440,5 +440,7 @@ dist-ssr
 *.suo
 *.ntvs*
 *.njsproj
-*.sln
 *.sw?
+
+# launch.json 파일만큼은 예외로 무시하지 않음
+!.vscode/launch.json
