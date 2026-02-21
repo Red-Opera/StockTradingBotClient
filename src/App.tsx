@@ -1,194 +1,82 @@
 ﻿import { useState } from 'react'
 import './App.css'
-
-interface Stock
-{
-    symbol: string
-    name: string
-    shares: number
-    avgPrice: number
-    currentPrice: number
-}
-
-interface PortfolioHistory
-{
-    date: string
-    value: number
-}
+import { UseHoldings } from './hooks/UseHoldings'
+import type { PortfolioSnapshot } from './hooks/UseHoldings'
 
 type TimeRange = 'day' | 'week' | 'month'
 
 function App()
 {
-    // 샘플 데이터 (실제로는 API에서 가져올 데이터)
-    const [stocks] = useState<Stock[]>([
-        {
-            symbol: 'AAPL',
-            name: 'Apple Inc.',
-            shares: 50,
-            avgPrice: 150.25,
-            currentPrice: 178.50
-        },
-        {
-            symbol: 'MSFT',
-            name: 'Microsoft Corporation',
-            shares: 30,
-            avgPrice: 320.80,
-            currentPrice: 378.91
-        },
-        {
-            symbol: 'GOOGL',
-            name: 'Alphabet Inc.',
-            shares: 20,
-            avgPrice: 125.60,
-            currentPrice: 141.80
-        },
-        {
-            symbol: 'TSLA',
-            name: 'Tesla, Inc.',
-            shares: 25,
-            avgPrice: 245.30,
-            currentPrice: 238.45
-        },
-        {
-            symbol: 'NVDA',
-            name: 'NVIDIA Corporation',
-            shares: 15,
-            avgPrice: 450.00,
-            currentPrice: 495.22
-        }
-    ])
+    const { holdings, history, connected } = UseHoldings()
+    const [selectedTimeRange, SetSelectedTimeRange] = useState<TimeRange>('month')
 
-    const [selectedTimeRange, setSelectedTimeRange] = useState<TimeRange>('month')
-
-    const calculateReturn = (stock: Stock) =>
-    {
-        const profit = (stock.currentPrice - stock.avgPrice) * stock.shares
-        const returnPercent = ((stock.currentPrice - stock.avgPrice) / stock.avgPrice) * 100
-
-        return { profit, returnPercent }
-    }
-
-    const calculateTotalValue = () =>
-    {
-        return stocks.reduce((sum, stock) => sum + (stock.currentPrice * stock.shares), 0)
-    }
-
-    const calculateTotalInvested = () =>
-    {
-        return stocks.reduce((sum, stock) => sum + (stock.avgPrice * stock.shares), 0)
-    }
-
-    const calculateTotalProfit = () =>
-    {
-        return stocks.reduce((sum, stock) =>
-        {
-            const { profit } = calculateReturn(stock)
-
-            return sum + profit
-        }, 0)
-    }
-
-    const calculateTotalReturn = () =>
-    {
-        const invested = calculateTotalInvested()
-        const profit = calculateTotalProfit()
-
-        return (profit / invested) * 100
-    }
-
-    const totalValue = calculateTotalValue()
-    const totalInvested = calculateTotalInvested()
-    const totalProfit = calculateTotalProfit()
-    const totalReturn = calculateTotalReturn()
-
-    // 전체 히스토리 데이터 생성 (30일)
-    const generateFullHistory = (): PortfolioHistory[] =>
-    {
-        const history: PortfolioHistory[] = []
-        const today = new Date()
-        const startValue = 25000
-        const endValue = totalValue
-
-        // 고정된 변동성 패턴 사용 (시드 기반)
-        const volatilityPattern =
-        [
-            -300, 200, -150, 400, 100, -250, 350, -100, 450, 50,
-            -200, 300, -350, 250, -50, 400, 150, -300, 200, -100,
-            350, -150, 100, 300, -200, 250, -50, 150, 200, 100
-        ]
-
-        for (let i = 29; i >= 0; i--)
-        {
-            const date = new Date(today)
-            date.setDate(date.getDate() - i)
-
-            const progress = (29 - i) / 29
-            const trend = startValue + (endValue - startValue) * progress
-            const volatility = volatilityPattern[29 - i]
-            const value = trend + volatility
-
-            history.push({
-                date: date.toISOString().split('T')[0],
-                value: Math.max(value, startValue * 0.95)
-            })
-        }
-
-        return history
-    }
-
-    const [fullHistory] = useState<PortfolioHistory[]>(generateFullHistory())
+    // 실시간 총 평가 금액
+    const totalValue = holdings.reduce((sum: number, h) => sum + h.value, 0)
+    const totalInvested = holdings.reduce((sum: number, h) => sum + h.purchasePrice * h.quantity, 0)
+    const totalProfit = holdings.reduce((sum: number, h) => sum + h.profitLoss, 0)
+    const totalReturn = totalInvested > 0 ? (totalProfit / totalInvested) * 100 : 0
 
     // 선택된 기간에 따라 필터링된 히스토리 반환
-    const getFilteredHistory = (): PortfolioHistory[] =>
+    const GetFilteredHistory = (): PortfolioSnapshot[] =>
     {
-        const today = new Date()
-        let daysToShow = 0
+        const base = history.length > 0
+            ? history
+            : [{ date: new Date().toISOString(), value: totalValue }]
 
-        switch (selectedTimeRange) {
+        const today = new Date()
+        let daysToShow = 30
+
+        // 기간에 따른 일 수 계산
+        switch (selectedTimeRange)
+        {
             case 'day':
                 daysToShow = 1
                 break
+
             case 'week':
                 daysToShow = 7
                 break
+
             case 'month':
                 daysToShow = 30
                 break
         }
 
+        // 오늘 날짜에서 선택된 기간만큼 이전 날짜 계산
         const cutoffDate = new Date(today)
         cutoffDate.setDate(cutoffDate.getDate() - daysToShow)
 
-        return fullHistory.filter(item => new Date(item.date) >= cutoffDate)
+        const filtered = base.filter(item => new Date(item.date) >= cutoffDate)
+
+        return filtered.length > 0 ? filtered : base
     }
 
-    const portfolioHistory = getFilteredHistory()
+    const portfolioHistory_filtered = GetFilteredHistory()
 
-    const formatCurrency = (value: number) =>
+    const FormatCurrency = (value: number) =>
     {
         return new Intl.NumberFormat('ko-KR', {
             style: 'currency',
-            currency: 'USD',
-            minimumFractionDigits: 2
+            currency: 'KRW',
+            minimumFractionDigits: 0
         }).format(value)
     }
 
-    const formatPercent = (value: number) =>
+    const FormatPercent = (value: number) =>
     {
         return `${value >= 0 ? '+' : ''}${value.toFixed(2)}%`
     }
 
     // 차트 데이터 계산
-    const maxValue = Math.max(...portfolioHistory.map(h => h.value))
-    const minValue = Math.min(...portfolioHistory.map(h => h.value))
-    const valueRange = maxValue - minValue
-    const periodChange = portfolioHistory.length > 1
-        ? ((portfolioHistory[portfolioHistory.length - 1].value - portfolioHistory[0].value) / portfolioHistory[0].value) * 100
+    const maxValue = Math.max(...portfolioHistory_filtered.map(h => h.value), totalValue || 1)
+    const minValue = Math.min(...portfolioHistory_filtered.map(h => h.value), totalValue || 0)
+    const valueRange = maxValue - minValue || 1
+    const periodChange = portfolioHistory_filtered.length > 1
+        ? ((portfolioHistory_filtered[portfolioHistory_filtered.length - 1].value - portfolioHistory_filtered[0].value) / Math.abs(portfolioHistory_filtered[0].value || 1)) * 100
         : 0
 
     // 시간대에 따른 날짜 포맷
-    const formatDate = (dateString: string) =>
+    const FormatDate = (dateString: string) =>
     {
         const date = new Date(dateString)
 
@@ -196,38 +84,47 @@ function App()
         {
             case 'day':
                 return date.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })
+
             case 'week':
                 return date.toLocaleDateString('ko-KR', { month: 'short', day: 'numeric' })
+
             case 'month':
                 return date.toLocaleDateString('ko-KR', { month: 'short', day: 'numeric' })
             default:
+
                 return dateString
         }
     }
 
     // X축 레이블 필터링
-    const getXAxisLabels = () =>
+    const GetXAxisLabels = () =>
     {
         switch (selectedTimeRange)
         {
             case 'day':
-                return portfolioHistory.filter((_, i) => i === 0 || i === portfolioHistory.length - 1)
+                return portfolioHistory_filtered.filter((_, i) => i === 0 || i === portfolioHistory_filtered.length - 1)
+
             case 'week':
-                return portfolioHistory.filter((_, i) => i % 2 === 0 || i === portfolioHistory.length - 1)
+                return portfolioHistory_filtered.filter((_, i) => i % 2 === 0 || i === portfolioHistory_filtered.length - 1)
+
             case 'month':
-                return portfolioHistory.filter((_, i) => i % 6 === 0 || i === portfolioHistory.length - 1)
+                return portfolioHistory_filtered.filter((_, i) => i % Math.max(Math.floor(portfolioHistory_filtered.length / 5), 1) === 0 || i === portfolioHistory_filtered.length - 1)
+
             default:
-                return portfolioHistory
+                return portfolioHistory_filtered
         }
     }
 
-    const getTimeRangeLabel = () =>
+    const GetTimeRangeLabel = () =>
     {
-        switch (selectedTimeRange) {
+        switch (selectedTimeRange)
+        {
             case 'day':
                 return '오늘'
+
             case 'week':
                 return '지난 7일'
+
             case 'month':
                 return '지난 30일'
         }
@@ -301,12 +198,10 @@ function App()
                         <p className="subtitle">AI가 관리하는 주식 현황</p>
                     </div>
                     <div className="header-actions">
-                        <button className="btn-secondary">
-                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4m4-5l5-5 5 5m-5-5v12" />
-                            </svg>
-                            내보내기
-                        </button>
+                        <div className={`connection-status ${connected ? 'connected' : 'disconnected'}`}>
+                            <span className="status-dot"></span>
+                            <span>{connected ? '실시간 연결됨' : '연결 끊김'}</span>
+                        </div>
                         <button className="btn-primary">
                             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                                 <polyline points="1 4 1 10 7 10" />
@@ -321,21 +216,21 @@ function App()
                 <div className="summary-cards">
                     <div className="summary-card">
                         <div className="summary-label">총 자산 가치</div>
-                        <div className="summary-value">{formatCurrency(totalValue)}</div>
+                        <div className="summary-value">{FormatCurrency(totalValue)}</div>
                     </div>
 
                     <div className="summary-card">
                         <div className="summary-label">투자 금액</div>
-                        <div className="summary-value">{formatCurrency(totalInvested)}</div>
+                        <div className="summary-value">{FormatCurrency(totalInvested)}</div>
                     </div>
 
                     <div className="summary-card highlight">
                         <div className="summary-label">총 수익</div>
                         <div className={`summary-value ${totalProfit >= 0 ? 'positive' : 'negative'}`}>
-                            {formatCurrency(totalProfit)}
+                            {FormatCurrency(totalProfit)}
                         </div>
                         <div className={`profit-amount ${totalReturn >= 0 ? 'positive' : 'negative'}`}>
-                            {formatPercent(totalReturn)}
+                            {FormatPercent(totalReturn)}
                         </div>
                     </div>
                 </div>
@@ -345,26 +240,26 @@ function App()
                     <div className="chart-header">
                         <div>
                             <h2 className="section-title">포트폴리오 가치 추이</h2>
-                            <p className="chart-subtitle">{getTimeRangeLabel()}간의 총 보유 자산 변화</p>
+                            <p className="chart-subtitle">{GetTimeRangeLabel()}간의 총 보유 자산 변화</p>
                         </div>
                         <div className="chart-stats">
                             {/* 기간 선택 버튼 */}
                             <div className="time-range-buttons">
                                 <button
                                     className={`time-range-btn ${selectedTimeRange === 'day' ? 'active' : ''}`}
-                                    onClick={() => setSelectedTimeRange('day')}
+                                    onClick={() => SetSelectedTimeRange('day')}
                                 >
                                     일
                                 </button>
                                 <button
                                     className={`time-range-btn ${selectedTimeRange === 'week' ? 'active' : ''}`}
-                                    onClick={() => setSelectedTimeRange('week')}
+                                    onClick={() => SetSelectedTimeRange('week')}
                                 >
                                     주
                                 </button>
                                 <button
                                     className={`time-range-btn ${selectedTimeRange === 'month' ? 'active' : ''}`}
-                                    onClick={() => setSelectedTimeRange('month')}
+                                    onClick={() => SetSelectedTimeRange('month')}
                                 >
                                     월
                                 </button>
@@ -378,7 +273,7 @@ function App()
                                         <polyline points="6 9 12 15 18 9" />
                                     )}
                                 </svg>
-                                <span>{formatPercent(periodChange)}</span>
+                                <span>{FormatPercent(periodChange)}</span>
                             </div>
                         </div>
                     </div>
@@ -390,7 +285,7 @@ function App()
                                 const value = maxValue - (i * valueRange / 4)
                                 return (
                                     <div key={i} className="chart-y-label">
-                                        {formatCurrency(value)}
+                                        {FormatCurrency(value)}
                                     </div>
                                 )
                             })}
@@ -425,8 +320,8 @@ function App()
                                 <path
                                     d={`
                     M 0 200
-                    ${portfolioHistory.map((point, i) => {
-                                        const x = (i / Math.max(portfolioHistory.length - 1, 1)) * 800
+                    ${portfolioHistory_filtered.map((point, i) => {
+                                        const x = (i / Math.max(portfolioHistory_filtered.length - 1, 1)) * 800
                                         const normalizedValue = (point.value - minValue) / (valueRange || 1)
                                         const y = 200 - (normalizedValue * 200)
                                         return `L ${x} ${y}`
@@ -439,8 +334,8 @@ function App()
 
                                 {/* Line */}
                                 <path
-                                    d={portfolioHistory.map((point, i) => {
-                                        const x = (i / Math.max(portfolioHistory.length - 1, 1)) * 800
+                                    d={portfolioHistory_filtered.map((point, i) => {
+                                        const x = (i / Math.max(portfolioHistory_filtered.length - 1, 1)) * 800
                                         const normalizedValue = (point.value - minValue) / (valueRange || 1)
                                         const y = 200 - (normalizedValue * 200)
                                         return `${i === 0 ? 'M' : 'L'} ${x} ${y}`
@@ -453,14 +348,14 @@ function App()
                                 />
 
                                 {/* Dots on data points */}
-                                {portfolioHistory.map((point, i) => {
+                                {portfolioHistory_filtered.map((point, i) => {
                                     const showDot = selectedTimeRange === 'day'
                                         ? true
-                                        : (i % 5 === 0 || i === portfolioHistory.length - 1)
+                                        : (i % 5 === 0 || i === portfolioHistory_filtered.length - 1)
 
                                     if (!showDot) return null
 
-                                    const x = (i / Math.max(portfolioHistory.length - 1, 1)) * 800
+                                    const x = (i / Math.max(portfolioHistory_filtered.length - 1, 1)) * 800
                                     const normalizedValue = (point.value - minValue) / (valueRange || 1)
                                     const y = 200 - (normalizedValue * 200)
                                     return (
@@ -479,9 +374,9 @@ function App()
 
                             {/* X-axis labels */}
                             <div className="chart-labels">
-                                {getXAxisLabels().map((point, i) => (
+                                {GetXAxisLabels().map((point, i) => (
                                     <div key={i} className="chart-label">
-                                        {formatDate(point.date)}
+                                        {FormatDate(point.date)}
                                     </div>
                                 ))}
                             </div>
@@ -497,80 +392,84 @@ function App()
                         <div className="legend-values">
                             <div className="legend-stat">
                                 <span className="legend-stat-label">최고</span>
-                                <span className="legend-stat-value">{formatCurrency(maxValue)}</span>
+                                <span className="legend-stat-value">{FormatCurrency(maxValue)}</span>
                             </div>
                             <div className="legend-stat">
                                 <span className="legend-stat-label">최저</span>
-                                <span className="legend-stat-value">{formatCurrency(minValue)}</span>
+                                <span className="legend-stat-value">{FormatCurrency(minValue)}</span>
                             </div>
                             <div className="legend-stat">
                                 <span className="legend-stat-label">현재</span>
-                                <span className="legend-stat-value">{formatCurrency(portfolioHistory[portfolioHistory.length - 1].value)}</span>
+                                <span className="legend-stat-value">{FormatCurrency(portfolioHistory_filtered.length > 0 ? portfolioHistory_filtered[portfolioHistory_filtered.length - 1].value : totalValue)}</span>
                             </div>
                         </div>
                     </div>
                 </div>
 
-                {/* 주식 목록 */}
+                {/* 보유 종목 목록 */}
                 <div className="stocks-section">
-                    <h2 className="section-title">보유 종목 ({stocks.length})</h2>
+                    <h2 className="section-title">보유 종목 ({holdings.length})</h2>
 
                     <div className="stocks-grid">
-                        {stocks.map((stock) => {
-                            const { profit, returnPercent } = calculateReturn(stock)
-                            const totalValue = stock.currentPrice * stock.shares
-                            const totalCost = stock.avgPrice * stock.shares
+                        {holdings.length === 0 ? (
+                            <div className="empty-state">
+                                <p>{connected ? '수신된 종목 데이터가 없습니다.' : 'C++ 서버 연결 대기 중...'}</p>
+                            </div>
+                        ) : (
+                            holdings.map((h) => {
+                                const avgUnitPrice = h.purchasePrice
 
-                            return (
-                                <div key={stock.symbol} className="stock-card">
-                                    <div className="stock-header">
-                                        <div className="stock-symbol-area">
-                                            <div className="stock-symbol">{stock.symbol}</div>
-                                            <div className="stock-name">{stock.name}</div>
+                                return (
+                                    <div key={h.code} className="stock-card">
+                                        <div className="stock-header">
+                                            <div className="stock-symbol-area">
+                                                <div className="stock-symbol">{h.code}</div>
+                                                <div className="stock-name">{h.name}</div>
+                                            </div>
+                                            <div className={`return-badge ${h.profitRate >= 0 ? 'positive' : 'negative'}`}>
+                                                {FormatPercent(h.profitRate)}
+                                            </div>
                                         </div>
-                                        <div className={`return-badge ${returnPercent >= 0 ? 'positive' : 'negative'}`}>
-                                            {formatPercent(returnPercent)}
+
+                                        <div className="stock-details">
+                                            <div className="detail-row">
+                                                <span className="detail-label">보유 수량</span>
+                                                <span className="detail-value">{h.quantity.toLocaleString('ko-KR')}주</span>
+                                            </div>
+
+                                            <div className="detail-row">
+                                                <span className="detail-label">평균 단가</span>
+                                                <span className="detail-value">{FormatCurrency(avgUnitPrice)}</span>
+                                            </div>
+
+                                            <div className="detail-row">
+                                                <span className="detail-label">현재가</span>
+                                                <span className="detail-value">{FormatCurrency(h.price)}</span>
+                                            </div>
+
+                                            <div className="divider"></div>
+
+                                            <div className="detail-row">
+                                                <span className="detail-label">매입 금액</span>
+                                                <span className="detail-value">{FormatCurrency(h.purchasePrice * h.quantity)}</span>
+                                            </div>
+
+                                            <div className="detail-row">
+                                                <span className="detail-label">평가 금액</span>
+                                                <span className="detail-value">{FormatCurrency(h.value)}</span>
+                                            </div>
+
+                                            <div className="detail-row highlight">
+                                                <span className="detail-label">손익</span>
+                                                <span className={`detail-value ${h.profitLoss >= 0 ? 'positive' : 'negative'}`}>
+                                                    {FormatCurrency(h.profitLoss)}
+                                                </span>
+                                            </div>
                                         </div>
                                     </div>
-
-                                    <div className="stock-details">
-                                        <div className="detail-row">
-                                            <span className="detail-label">보유 수량</span>
-                                            <span className="detail-value">{stock.shares}주</span>
-                                        </div>
-
-                                        <div className="detail-row">
-                                            <span className="detail-label">평균 단가</span>
-                                            <span className="detail-value">{formatCurrency(stock.avgPrice)}</span>
-                                        </div>
-
-                                        <div className="detail-row">
-                                            <span className="detail-label">현재가</span>
-                                            <span className="detail-value">{formatCurrency(stock.currentPrice)}</span>
-                                        </div>
-
-                                        <div className="divider"></div>
-
-                                        <div className="detail-row">
-                                            <span className="detail-label">투자 금액</span>
-                                            <span className="detail-value">{formatCurrency(totalCost)}</span>
-                                        </div>
-
-                                        <div className="detail-row">
-                                            <span className="detail-label">평가 금액</span>
-                                            <span className="detail-value">{formatCurrency(totalValue)}</span>
-                                        </div>
-
-                                        <div className="detail-row highlight">
-                                            <span className="detail-label">손익</span>
-                                            <span className={`detail-value ${profit >= 0 ? 'positive' : 'negative'}`}>
-                                                {formatCurrency(profit)}
-                                            </span>
-                                        </div>
-                                    </div>
-                                </div>
-                            )
-                        })}
+                                )
+                            })
+                        )}
                     </div>
                 </div>
             </main>
