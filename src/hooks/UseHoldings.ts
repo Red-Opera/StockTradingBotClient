@@ -29,7 +29,7 @@ export function UseHoldings()
 
     useEffect(() =>
     {
-        // 초기 데이터 로드 (REST API)
+        // 초기 보유 종목 데이터 로드 (REST API)
         fetch('/stream/holdings/latest')
             .then(res => res.json())
             .then((data: Holding[]) =>
@@ -38,13 +38,26 @@ export function UseHoldings()
                 data.forEach((h: Holding) => map.set(h.code, h))
                 mapRef.current = map
                 setHoldingsMap(new Map(map))
-
-                const total = data.reduce((s: number, h: Holding) => s + h.value, 0)
-
-                if (total > 0)
-                    setHistory([{ date: new Date().toISOString(), value: total }])
             })
             .catch((err: unknown) => console.warn('초기 보유 데이터 로드 실패:', err))
+
+        // DB에서 포트폴리오 과거 기록 로드
+        fetch('/stream/portfolio/recent?limit=500')
+            .then(res => res.json())
+            .then((data: { snapshotTime: string, totalValue: number }[]) =>
+            {
+                if (data.length > 0)
+                {
+                    // DB 데이터를 시간순 정렬 (서버가 DESC로 반환하므로 reverse)
+                    const sorted = [...data].reverse()
+                    const dbHistory: PortfolioSnapshot[] = sorted.map(s => ({
+                        date: s.snapshotTime,
+                        value: s.totalValue,
+                    }))
+                    setHistory(dbHistory)
+                }
+            })
+            .catch((err: unknown) => console.warn('포트폴리오 히스토리 로드 실패:', err))
 
         // SSE 실시간 구독
         const es = new EventSource('/stream/holdings')
@@ -58,6 +71,7 @@ export function UseHoldings()
                 const next = new Map(mapRef.current)
                 next.set(h.code, h)
                 mapRef.current = next
+
                 setHoldingsMap(new Map(next))
 
                 // SSE 콜백 내부에서 history 갱신 (useEffect 동기 호출 아님)
@@ -86,10 +100,7 @@ export function UseHoldings()
         es.onopen = () => setConnected(true)
         es.onerror = () => setConnected(false)
 
-        return () =>
-        {
-            es.close()
-        }
+        return () => { es.close() }
     }, [])
 
     return {
