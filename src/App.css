@@ -746,3 +746,192 @@ body {
     font-size: 13px;
   }
 }
+
+/* ===== Trade History Section ===== */
+.trades-section {
+  background: #141414;
+  border: 1px solid #1f1f1f;
+  border-radius: 16px;
+  padding: 28px;
+  transition: all 0.2s ease;
+}
+
+.trades-section:hover {
+  border-color: #27272a;
+}
+
+.trades-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 24px;
+}
+
+.trade-filter-buttons {
+  display: flex;
+  gap: 6px;
+  background: #1a1a1a;
+  padding: 4px;
+  border-radius: 10px;
+  border: 1px solid #27272a;
+}
+
+.trade-filter-btn {
+  padding: 6px 16px;
+  border: none;
+  background: transparent;
+  color: #71717a;
+  font-size: 13px;
+  font-weight: 600;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.trade-filter-btn:hover {
+  color: #e4e4e7;
+  background: #27272a;
+}
+
+.trade-filter-btn.active {
+  background: #3b82f6;
+  color: white;
+}
+
+/* Trade Table */
+.trades-table-container {
+  overflow-x: auto;
+  border-radius: 12px;
+  border: 1px solid #1f1f1f;
+}
+
+.trades-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  min-width: 900px;
+}
+
+.trades-table thead {
+  background: #1a1a1a;
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+.trades-table th {
+  padding: 12px 14px;
+  text-align: left;
+  font-weight: 600;
+  color: #71717a;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  border-bottom: 1px solid #27272a;
+  white-space: nowrap;
+}
+
+.trades-table td {
+  padding: 14px 14px;
+  border-bottom: 1px solid #1a1a1a;
+  color: #e4e4e7;
+  font-weight: 400;
+  white-space: nowrap;
+}
+
+.trades-table tbody tr {
+  transition: background 0.1s ease;
+}
+
+.trades-table tbody tr:hover {
+  background: #1a1a1a;
+}
+
+.trades-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.text-right {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Trade stock info */
+.trade-stock-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.trade-stock-name {
+  font-weight: 600;
+  color: #f4f4f5;
+  font-size: 13px;
+}
+
+.trade-stock-code {
+  font-size: 11px;
+  color: #71717a;
+}
+
+/* Trade type badge */
+.trade-type-badge {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.trade-type-badge.buy {
+  background: rgba(59, 130, 246, 0.15);
+  color: #3b82f6;
+}
+
+.trade-type-badge.sell {
+  background: rgba(239, 68, 68, 0.15);
+  color: #ef4444;
+}
+
+/* Trade remark */
+.trade-remark {
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #71717a;
+  font-size: 12px;
+}
+
+/* Empty state for trades */
+.trades-section .empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 60px 20px;
+}
+
+.empty-state-sub {
+  font-size: 13px;
+  color: #52525b;
+}
+
+/* Responsive trade table */
+@media (max-width: 960px) {
+  .trades-header {
+    flex-direction: column;
+    gap: 12px;
+    align-items: flex-start;
+  }
+
+  .trade-filter-buttons {
+    width: 100%;
+  }
+
+  .trade-filter-btn {
+    flex: 1;
+    text-align: center;
+  }
+}
