@@ -1,15 +1,14 @@
 ﻿import { useState } from 'react'
 import './App.css'
 import { UseHoldings } from './hooks/UseHoldings'
-import type { PortfolioSnapshot, TradeRecord } from './hooks/UseHoldings'
+import type { ChartTimeRange, PortfolioSnapshot, TradeRecord } from './hooks/UseHoldings'
 
-type TimeRange = 'day' | 'week' | 'month'
 type PageType = 'dashboard' | 'trades'
 type TradeFilterType = 'all' | 'buy' | 'sell'
 
 function App() {
-    const { holdings, history, trades, connected } = UseHoldings()
-    const [selectedTimeRange, SetSelectedTimeRange] = useState<TimeRange>('month')
+    const [selectedTimeRange, SetSelectedTimeRange] = useState<ChartTimeRange>('month')
+    const { holdings, history, trades, connected } = UseHoldings(selectedTimeRange)
     const [activePage, SetActivePage] = useState<PageType>('dashboard')
     const [tradeFilter, SetTradeFilter] = useState<TradeFilterType>('all')
 
@@ -59,37 +58,11 @@ function App() {
     const totalProfit = holdings.reduce((sum: number, h) => sum + h.profitLoss, 0)
     const totalReturn = totalInvested > 0 ? (totalProfit / totalInvested) * 100 : 0
 
-    // 선택된 기간에 따라 필터링된 히스토리 반환
+    // 선택된 기간에 따라 필터링된 히스토리 반환 - 백엔드에서 이미 처리해서 주므로 그대로 반환 (히스토리가 비었을때만 현재 가치 1개 리턴)
     const GetFilteredHistory = (): PortfolioSnapshot[] => {
-        const base = history.length > 0
+        return history.length > 0
             ? history
             : [{ date: new Date().toISOString(), value: totalValue }]
-
-        const today = new Date()
-        let daysToShow = 30
-
-        // 기간에 따른 일 수 계산
-        switch (selectedTimeRange) {
-            case 'day':
-                daysToShow = 1
-                break
-
-            case 'week':
-                daysToShow = 7
-                break
-
-            case 'month':
-                daysToShow = 30
-                break
-        }
-
-        // 오늘 날짜에서 선택된 기간만큼 이전 날짜 계산
-        const cutoffDate = new Date(today)
-        cutoffDate.setDate(cutoffDate.getDate() - daysToShow)
-
-        const filtered = base.filter(item => new Date(item.date) >= cutoffDate)
-
-        return filtered.length > 0 ? filtered : base
     }
 
     const portfolioHistory_filtered = GetFilteredHistory()
@@ -119,47 +92,47 @@ function App() {
         const date = new Date(dateString)
 
         switch (selectedTimeRange) {
+            case 'second':
+            case 'minute':
+                return date.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+            case 'hour':
             case 'day':
-                return date.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })
-
+                return date.toLocaleTimeString('ko-KR', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
             case 'week':
-                return date.toLocaleDateString('ko-KR', { month: 'short', day: 'numeric' })
-
             case 'month':
                 return date.toLocaleDateString('ko-KR', { month: 'short', day: 'numeric' })
             default:
-
                 return dateString
         }
     }
 
     // X축 레이블 필터링
     const GetXAxisLabels = () => {
-        switch (selectedTimeRange) {
-            case 'day':
-                return portfolioHistory_filtered.filter((_, i) => i === 0 || i === portfolioHistory_filtered.length - 1)
+        const length = portfolioHistory_filtered.length;
+        if (length <= 5) return portfolioHistory_filtered;
 
-            case 'week':
-                return portfolioHistory_filtered.filter((_, i) => i % 2 === 0 || i === portfolioHistory_filtered.length - 1)
+        // 약 5개의 레이블이 표시되도록 간격 계산
+        const step = Math.max(Math.floor(length / 5), 1);
 
-            case 'month':
-                return portfolioHistory_filtered.filter((_, i) => i % Math.max(Math.floor(portfolioHistory_filtered.length / 5), 1) === 0 || i === portfolioHistory_filtered.length - 1)
-
-            default:
-                return portfolioHistory_filtered
-        }
+        return portfolioHistory_filtered.filter((_, i) => i % step === 0 || i === length - 1);
     }
 
     const GetTimeRangeLabel = () => {
         switch (selectedTimeRange) {
+            case 'second':
+                return '최근 5분'
+            case 'minute':
+                return '최근 1시간'
+            case 'hour':
+                return '최근 24시간'
             case 'day':
-                return '오늘'
-
-            case 'week':
                 return '지난 7일'
-
+            case 'week':
+                return '지난 1개월'
             case 'month':
-                return '지난 30일'
+                return '지난 6개월'
+            default:
+                return ''
         }
     }
 
@@ -274,7 +247,25 @@ function App() {
                                 </div>
                                 <div className="chart-stats">
                                     {/* 기간 선택 버튼 */}
-                                    <div className="time-range-buttons">
+                                    <div className="time-range-buttons" style={{ overflowX: 'auto', whiteSpace: 'nowrap' }}>
+                                        <button
+                                            className={`time-range-btn ${selectedTimeRange === 'second' ? 'active' : ''}`}
+                                            onClick={() => SetSelectedTimeRange('second')}
+                                        >
+                                            초
+                                        </button>
+                                        <button
+                                            className={`time-range-btn ${selectedTimeRange === 'minute' ? 'active' : ''}`}
+                                            onClick={() => SetSelectedTimeRange('minute')}
+                                        >
+                                            분
+                                        </button>
+                                        <button
+                                            className={`time-range-btn ${selectedTimeRange === 'hour' ? 'active' : ''}`}
+                                            onClick={() => SetSelectedTimeRange('hour')}
+                                        >
+                                            시
+                                        </button>
                                         <button
                                             className={`time-range-btn ${selectedTimeRange === 'day' ? 'active' : ''}`}
                                             onClick={() => SetSelectedTimeRange('day')}

@@ -35,7 +35,9 @@ export interface TradeRecord {
     remarkName: string         // 적요명
 }
 
-export function UseHoldings() {
+export type ChartTimeRange = 'second' | 'minute' | 'hour' | 'day' | 'week' | 'month'
+
+export function UseHoldings(timeRange: ChartTimeRange = 'day') {
     const [holdingsMap, setHoldingsMap] = useState<Map<string, Holding>>(new Map())
     const [connected, setConnected] = useState(false)
     const [history, setHistory] = useState<PortfolioSnapshot[]>([])
@@ -56,17 +58,17 @@ export function UseHoldings() {
             .catch((err: unknown) => console.warn('초기 보유 데이터 로드 실패:', err))
 
         // DB에서 포트폴리오 과거 기록 로드
-        fetch('/stream/portfolio/recent?limit=500')
+        fetch(`/stream/portfolio/chart?range=${timeRange}`)
             .then(res => res.json())
             .then((data: { snapshotTime: string, totalValue: number }[]) => {
                 if (data.length > 0) {
-                    // DB 데이터를 시간순 정렬 (서버가 DESC로 반환하므로 reverse)
-                    const sorted = [...data].reverse()
-                    const dbHistory: PortfolioSnapshot[] = sorted.map(s => ({
+                    const dbHistory: PortfolioSnapshot[] = data.map(s => ({
                         date: s.snapshotTime,
                         value: s.totalValue,
                     }))
                     setHistory(dbHistory)
+                } else {
+                    setHistory([])
                 }
             })
             .catch((err: unknown) => console.warn('포트폴리오 히스토리 로드 실패:', err))
@@ -141,7 +143,7 @@ export function UseHoldings() {
         es.onerror = () => setConnected(false)
 
         return () => { es.close() }
-    }, [])
+    }, [timeRange])
 
     return {
         holdings: Array.from(holdingsMap.values()),
