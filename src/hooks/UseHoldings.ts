@@ -37,6 +37,32 @@ export interface TradeRecord {
 
 export type ChartTimeRange = 'second' | 'minute' | 'hour' | 'day' | 'week' | 'month'
 
+// timeRange에 해당하는 간격(밀리초)을 반환 (서버의 intervalSeconds와 동일 기준)
+function getIntervalMs(range: ChartTimeRange): number {
+    switch (range) {
+        case 'second': return 5 * 1000        // 5초
+        case 'minute': return 60 * 1000       // 1분
+        case 'hour': return 600 * 1000      // 10분
+        case 'day': return 3600 * 1000     // 1시간
+        case 'week': return 21600 * 1000    // 6시간
+        case 'month': return 86400 * 1000    // 1일
+        default: return 3600 * 1000
+    }
+}
+
+// timeRange에 해당하는 최대 데이터 개수 반환
+function getMaxPoints(range: ChartTimeRange): number {
+    switch (range) {
+        case 'second': return 60;     // 5분 (5초 간격 = 60개)
+        case 'minute': return 60;     // 1시간 (1분 간격 = 60개)
+        case 'hour': return 144;      // 24시간 (10분 간격 = 144개)
+        case 'day': return 168;       // 7일 (1시간 간격 = 168개)
+        case 'week': return 120;      // 1개월 (6시간 간격 = 120개)
+        case 'month': return 180;     // 6개월 (1일 간격 = 180개)
+        default: return 500;
+    }
+}
+
 export function UseHoldings(timeRange: ChartTimeRange = 'day') {
     const [holdingsMap, setHoldingsMap] = useState<Map<string, Holding>>(new Map())
     const [connected, setConnected] = useState(false)
@@ -44,6 +70,12 @@ export function UseHoldings(timeRange: ChartTimeRange = 'day') {
     const [trades, setTrades] = useState<TradeRecord[]>([])
     const mapRef = useRef<Map<string, Holding>>(new Map())
     const esRef = useRef<EventSource | null>(null)
+    const timeRangeRef = useRef<ChartTimeRange>(timeRange)
+
+    // timeRange가 변경될 때 ref도 갱신 (SSE 콜백에서 최신 값 참조)
+    useEffect(() => {
+        timeRangeRef.current = timeRange
+    }, [timeRange])
 
     useEffect(() => {
         // 초기 보유 종목 데이터 로드 (REST API)
@@ -95,7 +127,7 @@ export function UseHoldings(timeRange: ChartTimeRange = 'day') {
 
                 setHoldingsMap(new Map(next))
 
-                // SSE 콜백 내부에서 history 갱신 (useEffect 동기 호출 아님)
+                // SSE 콜백 내부에서 history 갱신 — 선택된 시간 간격을 존중
                 const total = Array.from(next.values()).reduce((s: number, item: Holding) => s + item.value, 0)
 
                 setHistory(prev => {
@@ -104,10 +136,27 @@ export function UseHoldings(timeRange: ChartTimeRange = 'day') {
                     if (last && last.value === total)
                         return prev
 
-                    const entry: PortfolioSnapshot = { date: new Date().toISOString(), value: total }
+                    const now = new Date()
+                    const intervalMs = getIntervalMs(timeRangeRef.current)
+
+                    // 마지막 데이터 포인트와의 시간 차이가 간격보다 작으면 값만 업데이트
+                    if (last) {
+                        const lastTime = new Date(last.date).getTime()
+                        const elapsed = now.getTime() - lastTime
+
+                        if (elapsed < intervalMs) {
+                            const updated = [...prev]
+                            updated[updated.length - 1] = { ...last, value: total }
+                            return updated
+                        }
+                    }
+
+                    // 간격 이상 경과: 새 포인트 추가
+                    const entry: PortfolioSnapshot = { date: now.toISOString(), value: total }
                     const updated = [...prev, entry]
 
-                    return updated.length > 500 ? updated.slice(-500) : updated
+                    const maxPts = getMaxPoints(timeRangeRef.current)
+                    return updated.length > maxPts ? updated.slice(-maxPts) : updated
                 })
             }
 
