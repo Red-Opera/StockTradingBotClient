@@ -37,6 +37,13 @@ export interface TradeRecord {
 
 export type ChartTimeRange = 'second' | 'minute' | 'hour' | 'day' | 'week' | 'month'
 
+// 한국 주식시장 장 운영 시간 체크 (09:00 ~ 15:30)
+function isMarketHours(date?: Date): boolean {
+    const d = date ?? new Date()
+    const totalMinutes = d.getHours() * 60 + d.getMinutes()
+    return totalMinutes >= 540 && totalMinutes <= 930  // 09:00(540분) ~ 15:30(930분)
+}
+
 // timeRange에 해당하는 간격(밀리초)을 반환 (서버의 intervalSeconds와 동일 기준)
 function getIntervalMs(range: ChartTimeRange): number {
     switch (range) {
@@ -137,6 +144,11 @@ export function UseHoldings(timeRange: ChartTimeRange = 'day') {
                         return prev
 
                     const now = new Date()
+
+                    // 장 운영 시간(09:00~15:30) 외에는 차트 데이터 추가 안함
+                    if (!isMarketHours(now))
+                        return prev
+
                     const intervalMs = getIntervalMs(timeRangeRef.current)
 
                     // 마지막 데이터 포인트와의 시간 차이가 간격보다 작으면 값만 업데이트
