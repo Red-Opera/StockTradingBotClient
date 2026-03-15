@@ -1,4 +1,4 @@
-﻿import { useState } from 'react'
+import { useState, useRef, useCallback } from 'react'
 import './App.css'
 import { UseHoldings } from './hooks/UseHoldings'
 import type { ChartTimeRange, PortfolioSnapshot, TradeRecord } from './hooks/UseHoldings'
@@ -11,6 +11,8 @@ function App() {
     const { holdings, history, trades, connected } = UseHoldings(selectedTimeRange)
     const [activePage, SetActivePage] = useState<PageType>('dashboard')
     const [tradeFilter, SetTradeFilter] = useState<TradeFilterType>('all')
+    const [hoveredIndex, SetHoveredIndex] = useState<number | null>(null)
+    const chartWrapperRef = useRef<HTMLDivElement>(null)
 
     // 거래 내역 필터링
     const GetFilteredTrades = (): TradeRecord[] => {
@@ -105,6 +107,33 @@ function App() {
                 return dateString
         }
     }
+
+    // 툴팁용 상세 날짜 포맷
+    const FormatTooltipDate = (dateString: string) => {
+        const date = new Date(dateString)
+        const datePart = date.toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric' })
+        const timePart = date.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+        return { datePart, timePart }
+    }
+
+    // 차트 마우스 이벤트 핸들러
+    const HandleChartMouseMove = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+        const wrapper = chartWrapperRef.current
+        if (!wrapper || portfolioHistory_filtered.length <= 1) return
+
+        const rect = wrapper.getBoundingClientRect()
+        const mouseX = e.clientX - rect.left
+        const chartWidth = rect.width
+        const ratio = mouseX / chartWidth
+        const index = Math.round(ratio * (portfolioHistory_filtered.length - 1))
+        const clampedIndex = Math.max(0, Math.min(index, portfolioHistory_filtered.length - 1))
+
+        SetHoveredIndex(clampedIndex)
+    }, [portfolioHistory_filtered.length])
+
+    const HandleChartMouseLeave = useCallback(() => {
+        SetHoveredIndex(null)
+    }, [])
 
     // X축 레이블 필터링
     const GetXAxisLabels = () => {
@@ -312,86 +341,179 @@ function App() {
                                     })}
                                 </div>
 
-                                <div className="chart-wrapper">
-                                    <svg className="chart" viewBox="0 0 800 200" preserveAspectRatio="none">
-                                        {/* Grid lines */}
-                                        <g className="grid-lines">
-                                            {[0, 1, 2, 3, 4].map((i) => (
-                                                <line
-                                                    key={i}
-                                                    x1="0"
-                                                    y1={i * 50}
-                                                    x2="800"
-                                                    y2={i * 50}
-                                                    stroke="#3f3f46"
-                                                    strokeWidth="1"
-                                                    strokeDasharray="4 4"
-                                                />
-                                            ))}
-                                        </g>
+                                <div className="chart-main">
+                                    <div
+                                        className="chart-wrapper"
+                                        ref={chartWrapperRef}
+                                        onMouseMove={HandleChartMouseMove}
+                                        onMouseLeave={HandleChartMouseLeave}
+                                        style={{ position: 'relative', width: '100%', height: '220px' }}
+                                    >
+                                        {/* Area and Line SVG (Stretched) */}
+                                        <svg
+                                            className="chart"
+                                            viewBox="0 0 800 200"
+                                            preserveAspectRatio="none"
+                                            style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%' }}
+                                        >
+                                            {/* Area fill */}
+                                            <defs>
+                                                <linearGradient id="areaGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+                                                    <stop offset="0%" stopColor="#3b82f6" stopOpacity="0.3" />
+                                                    <stop offset="100%" stopColor="#3b82f6" stopOpacity="0" />
+                                                </linearGradient>
+                                            </defs>
 
-                                        {/* Area fill */}
-                                        <defs>
-                                            <linearGradient id="areaGradient" x1="0%" y1="0%" x2="0%" y2="100%">
-                                                <stop offset="0%" stopColor="#3b82f6" stopOpacity="0.3" />
-                                                <stop offset="100%" stopColor="#3b82f6" stopOpacity="0" />
-                                            </linearGradient>
-                                        </defs>
-
-                                        <path
-                                            d={`
+                                            <path
+                                                d={`
                     M 0 200
                     ${portfolioHistory_filtered.map((point, i) => {
-                                                const x = (i / Math.max(portfolioHistory_filtered.length - 1, 1)) * 800
-                                                const normalizedValue = (point.value - minValue) / (valueRange || 1)
-                                                const y = 200 - (normalizedValue * 200)
-                                                return `L ${x} ${y}`
-                                            }).join(' ')}
+                                                    const x = (i / Math.max(portfolioHistory_filtered.length - 1, 1)) * 800
+                                                    const normalizedValue = (point.value - minValue) / (valueRange || 1)
+                                                    const y = 200 - (normalizedValue * 200)
+                                                    return `L ${x} ${y}`
+                                                }).join(' ')}
                     L 800 200
                     Z
                   `}
-                                            fill="url(#areaGradient)"
-                                        />
+                                                fill="url(#areaGradient)"
+                                            />
 
-                                        {/* Line */}
-                                        <path
-                                            d={portfolioHistory_filtered.map((point, i) => {
-                                                const x = (i / Math.max(portfolioHistory_filtered.length - 1, 1)) * 800
+                                            {/* Line */}
+                                            <path
+                                                d={portfolioHistory_filtered.map((point, i) => {
+                                                    const x = (i / Math.max(portfolioHistory_filtered.length - 1, 1)) * 800
+                                                    const normalizedValue = (point.value - minValue) / (valueRange || 1)
+                                                    const y = 200 - (normalizedValue * 200)
+                                                    return `${i === 0 ? 'M' : 'L'} ${x} ${y}`
+                                                }).join(' ')}
+                                                fill="none"
+                                                stroke="#3b82f6"
+                                                strokeWidth="2.5"
+                                                strokeLinecap="round"
+                                                strokeLinejoin="round"
+                                            />
+                                        </svg>
+
+                                        {/* Grid, Dots, and Indicators SVG (Not Stretched) */}
+                                        <svg
+                                            style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'none' }}
+                                        >
+                                            {/* Grid lines */}
+                                            <g className="grid-lines">
+                                                {[0, 1, 2, 3, 4].map((i) => (
+                                                    <line
+                                                        key={i}
+                                                        x1="0"
+                                                        y1={`${i * 25}%`}
+                                                        x2="100%"
+                                                        y2={`${i * 25}%`}
+                                                        stroke="#3f3f46"
+                                                        strokeWidth="1"
+                                                        strokeDasharray="4 4"
+                                                    />
+                                                ))}
+                                            </g>
+
+                                            {/* Vertical indicator line */}
+                                            {hoveredIndex !== null && (() => {
+                                                const xPercent = (hoveredIndex / Math.max(portfolioHistory_filtered.length - 1, 1)) * 100
+                                                return (
+                                                    <line
+                                                        x1={`${xPercent}%`}
+                                                        y1="0"
+                                                        x2={`${xPercent}%`}
+                                                        y2="100%"
+                                                        stroke="#3b82f6"
+                                                        strokeWidth="1.5"
+                                                        strokeOpacity="0.7"
+                                                        className="chart-vertical-line"
+                                                    />
+                                                )
+                                            })()}
+
+                                            {/* Dots on data points */}
+                                            {portfolioHistory_filtered.map((point, i) => {
+                                                const isHovered = hoveredIndex === i
+
+                                                const xPercent = (i / Math.max(portfolioHistory_filtered.length - 1, 1)) * 100
                                                 const normalizedValue = (point.value - minValue) / (valueRange || 1)
-                                                const y = 200 - (normalizedValue * 200)
-                                                return `${i === 0 ? 'M' : 'L'} ${x} ${y}`
-                                            }).join(' ')}
-                                            fill="none"
-                                            stroke="#3b82f6"
-                                            strokeWidth="2.5"
-                                            strokeLinecap="round"
-                                            strokeLinejoin="round"
-                                        />
+                                                const yPercent = (1 - normalizedValue) * 100
 
-                                        {/* Dots on data points */}
-                                        {portfolioHistory_filtered.map((point, i) => {
-                                            const showDot = selectedTimeRange === 'day'
-                                                ? true
-                                                : (i % 5 === 0 || i === portfolioHistory_filtered.length - 1)
+                                                return (
+                                                    <g key={i}>
+                                                        {isHovered && (
+                                                            <circle
+                                                                cx={`${xPercent}%`}
+                                                                cy={`${yPercent}%`}
+                                                                r="10"
+                                                                fill="#3b82f6"
+                                                                fillOpacity="0.2"
+                                                                className="chart-active-dot-glow"
+                                                            />
+                                                        )}
+                                                        <circle
+                                                            cx={`${xPercent}%`}
+                                                            cy={`${yPercent}%`}
+                                                            r={isHovered ? 6 : 4}
+                                                            fill={isHovered ? '#60a5fa' : '#3b82f6'}
+                                                            stroke={isHovered ? '#ffffff' : '#141414'}
+                                                            strokeWidth={isHovered ? 2.5 : 2}
+                                                            className={isHovered ? 'chart-active-dot' : ''}
+                                                        />
+                                                    </g>
+                                                )
+                                            })}
+                                        </svg>
 
-                                            if (!showDot) return null
+                                        {/* Tooltip */}
+                                        {hoveredIndex !== null && portfolioHistory_filtered[hoveredIndex] && (() => {
+                                            const point = portfolioHistory_filtered[hoveredIndex]
+                                            const { datePart, timePart } = FormatTooltipDate(point.date)
+                                            const firstValue = portfolioHistory_filtered[0].value
+                                            const changeFromStart = firstValue !== 0
+                                                ? ((point.value - firstValue) / Math.abs(firstValue)) * 100
+                                                : 0
+                                            const prevPoint = hoveredIndex > 0 ? portfolioHistory_filtered[hoveredIndex - 1] : null
+                                            const changeFromPrev = prevPoint ? point.value - prevPoint.value : 0
 
-                                            const x = (i / Math.max(portfolioHistory_filtered.length - 1, 1)) * 800
-                                            const normalizedValue = (point.value - minValue) / (valueRange || 1)
-                                            const y = 200 - (normalizedValue * 200)
+                                            // 툴팁 위치 계산 (퍼센트 기반)
+                                            const xPercent = (hoveredIndex / Math.max(portfolioHistory_filtered.length - 1, 1)) * 100
+                                            const tooltipStyle: React.CSSProperties = {
+                                                left: `${xPercent}%`,
+                                                transform: xPercent > 70 ? 'translateX(-100%)' : xPercent < 30 ? 'translateX(0)' : 'translateX(-50%)',
+                                            }
+
                                             return (
-                                                <circle
-                                                    key={i}
-                                                    cx={x}
-                                                    cy={y}
-                                                    r="4"
-                                                    fill="#3b82f6"
-                                                    stroke="#141414"
-                                                    strokeWidth="2"
-                                                />
+                                                <div className="chart-tooltip" style={tooltipStyle}>
+                                                    <div className="chart-tooltip-header">
+                                                        <span className="chart-tooltip-date">{datePart}</span>
+                                                        <span className="chart-tooltip-time">{timePart}</span>
+                                                    </div>
+                                                    <div className="chart-tooltip-body">
+                                                        <div className="chart-tooltip-row">
+                                                            <span className="chart-tooltip-label">총 자산</span>
+                                                            <span className="chart-tooltip-value">{FormatCurrency(point.value)}</span>
+                                                        </div>
+                                                        <div className="chart-tooltip-row">
+                                                            <span className="chart-tooltip-label">기간 대비</span>
+                                                            <span className={`chart-tooltip-value ${changeFromStart >= 0 ? 'positive' : 'negative'}`}>
+                                                                {FormatPercent(changeFromStart)}
+                                                            </span>
+                                                        </div>
+                                                        {prevPoint && (
+                                                            <div className="chart-tooltip-row">
+                                                                <span className="chart-tooltip-label">이전 대비</span>
+                                                                <span className={`chart-tooltip-value ${changeFromPrev >= 0 ? 'positive' : 'negative'}`}>
+                                                                    {changeFromPrev >= 0 ? '+' : ''}{FormatCurrency(changeFromPrev)}
+                                                                </span>
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                </div>
                                             )
-                                        })}
-                                    </svg>
+                                        })()}
+                                    </div>
 
                                     {/* X-axis labels */}
                                     <div className="chart-labels">
