@@ -607,6 +607,18 @@ function App() {
                                                         <span className="detail-value">{FormatCurrency(h.price)}</span>
                                                     </div>
 
+                                                    <div className="detail-row">
+                                                        <span className="detail-label">전일 종가</span>
+                                                        <span className="detail-value">{FormatCurrency(h.prevClosePrice)}</span>
+                                                    </div>
+
+                                                    <div className="detail-row">
+                                                        <span className="detail-label">하루 수익률</span>
+                                                        <span className={`detail-value ${h.dailyProfitRate >= 0 ? 'positive' : 'negative'}`}>
+                                                            {FormatPercent(h.dailyProfitRate)}
+                                                        </span>
+                                                    </div>
+
                                                     <div className="divider"></div>
 
                                                     <div className="detail-row">

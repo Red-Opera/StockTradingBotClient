@@ -9,7 +9,9 @@ export interface Holding {
     value: number           // 평가 금액
     purchasePrice: number   // 매입 금액
     profitLoss: number      // 손익 금액
-    profitRate: number      // 손익률
+    profitRate: number      // 손익률 (매입가 대비)
+    prevClosePrice: number  // 전일 종가
+    dailyProfitRate: number // 하루 수익률 (전일 종가 대비)
 }
 
 export interface PortfolioSnapshot {
