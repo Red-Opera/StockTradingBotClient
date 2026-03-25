@@ -609,7 +609,7 @@ function App() {
 
                                                     <div className="detail-row">
                                                         <span className="detail-label">전일 종가</span>
-                                                        <span className="detail-value">{FormatCurrency(h.prevClosePrice)}</span>
+                                                        <span className="detail-value">{FormatCurrency(h.lastEndPrice)}</span>
                                                     </div>
 
                                                     <div className="detail-row">
